@@ -1,0 +1,658 @@
+{
+  "name": "Deal Risk Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        96,
+        0
+      ],
+      "id": "8a5a1e09-e17d-4421-8272-e11592e08cd7",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date();\n\nfunction daysBetween(dateA, dateB) {\n  const ms = 1000 * 60 * 60 * 24;\n  return Math.floor((dateA - dateB) / ms);\n}\n\nreturn items.map(item => {\n  const d = item.json;\n\n  const amount = Number(d.Amount || 0);\n  const daysInStage = Number(d.DaysInStage || 0);\n\n  const closeDate = d.CloseDate ? new Date(d.CloseDate) : null;\n  const lastActivityDate = d.LastActivityDate ? new Date(d.LastActivityDate) : null;\n  const nextStepDate = d.NextStepDate ? new Date(d.NextStepDate) : null;\n\n  const daysSinceLastActivity = lastActivityDate\n    ? daysBetween(today, lastActivityDate)\n    : 999;\n\n  const daysUntilClose = closeDate\n    ? daysBetween(closeDate, today)\n    : 999;\n\n  const nextStepOverdue = nextStepDate\n    ? today > nextStepDate\n    : true;\n\n  return {\n    json: {\n      ...d,\n      Amount: amount,\n      DaysInStage: daysInStage,\n      daysSinceLastActivity,\n      daysUntilClose,\n      nextStepOverdue,\n      runDate: today.toISOString().split('T')[0],\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        0
+      ],
+      "id": "fa5a8b14-b1d7-4465-a7c4-239621c07483",
+      "name": "Normalize Deal Data"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1JuvfN58KQdRUaMFRwNNh3gSHvHPCdphG5QAOln1Y8og",
+          "mode": "list",
+          "cachedResultName": "Deal Risk Monitor Portfolio Project",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JuvfN58KQdRUaMFRwNNh3gSHvHPCdphG5QAOln1Y8og/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Open Deals",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JuvfN58KQdRUaMFRwNNh3gSHvHPCdphG5QAOln1Y8og/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        0
+      ],
+      "id": "4ec159d8-2825-411b-b105-cb49c49c2b1b",
+      "name": "Get Open Deals",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "JJZNH1F86NY2ZkXE",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const d = item.json;\n\n  let riskScore = 0;\n  const reasons = [];\n  let recommendedAction = \"No immediate action\";\n\n  // 1) inactivity risk\n  if (d.daysSinceLastActivity >= 14) {\n    riskScore += 30;\n    reasons.push(\"No activity in 14+ days\");\n  } else if (d.daysSinceLastActivity >= 7) {\n    riskScore += 15;\n    reasons.push(\"No activity in 7+ days\");\n  }\n\n  // 2) stage stagnation risk\n  if (d.DaysInStage >= 30) {\n    riskScore += 25;\n    reasons.push(\"Deal stuck in stage for 30+ days\");\n  } else if (d.DaysInStage >= 14) {\n    riskScore += 10;\n    reasons.push(\"Deal aging in current stage\");\n  }\n\n  // 3) next step missing or overdue\n  if (d.nextStepOverdue) {\n    riskScore += 20;\n    reasons.push(\"Next step is missing or overdue\");\n  }\n\n  // 4) close date risk\n  if (d.daysUntilClose < 0) {\n    riskScore += 25;\n    reasons.push(\"Close date already passed\");\n  } else if (d.daysUntilClose <= 7 && d.Stage !== \"Negotiation\" && d.Stage !== \"Closed Won\") {\n    riskScore += 15;\n    reasons.push(\"Close date soon but deal not late-stage\");\n  }\n\n  // 5) bigger deal = more attention\n  if (d.Amount >= 20000) {\n    riskScore += 10;\n    reasons.push(\"High-value deal\");\n  }\n\n  let riskLevel = \"Low\";\n  if (riskScore >= 70) {\n    riskLevel = \"High\";\n    recommendedAction = \"Immediate rep follow-up and manager review\";\n  } else if (riskScore >= 40) {\n    riskLevel = \"Medium\";\n    recommendedAction = \"Rep follow-up within 24 hours\";\n  }\n\n  return {\n    json: {\n      ...d,\n      riskScore,\n      riskLevel,\n      reasons: reasons.join(\"; \"),\n      recommendedAction,\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        0
+      ],
+      "id": "38ab2e8b-4df0-4dfc-9842-712428bea3e8",
+      "name": "Score Deal Risk"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ef03971e-75bb-4131-9bb4-0d9531b72c4d",
+              "leftValue": "={{ $json.riskScore }}",
+              "rightValue": 40,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        992,
+        0
+      ],
+      "id": "01ca510a-dc72-4881-beb7-129afca55602",
+      "name": "Filter Medium/High Risk Deals"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1JuvfN58KQdRUaMFRwNNh3gSHvHPCdphG5QAOln1Y8og",
+          "mode": "list",
+          "cachedResultName": "Deal Risk Monitor Portfolio Project",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JuvfN58KQdRUaMFRwNNh3gSHvHPCdphG5QAOln1Y8og/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1335162949,
+          "mode": "list",
+          "cachedResultName": "Risk Alert",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JuvfN58KQdRUaMFRwNNh3gSHvHPCdphG5QAOln1Y8og/edit#gid=1335162949"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "DealID": "={{ $json.DealID }}",
+            "Company": "={{ $json.Company }}",
+            "Owner": "={{ $json.Owner }}",
+            "Stage": "={{ $json.Stage }}",
+            "Amount": "={{ $json.Amount }}",
+            "RunDate": "={{ $json.runDate }}",
+            "RiskScore": "={{ $json.riskScore }}",
+            "RiskLevel": "={{ $json.riskLevel }}",
+            "Reasons": "={{ $json.reasons }}",
+            "RecommendedAction": "={{ $json.recommendedAction }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "RunDate",
+              "displayName": "RunDate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DealID",
+              "displayName": "DealID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Owner",
+              "displayName": "Owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Stage",
+              "displayName": "Stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Amount",
+              "displayName": "Amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "RiskScore",
+              "displayName": "RiskScore",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "RiskLevel",
+              "displayName": "RiskLevel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reasons",
+              "displayName": "Reasons",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "RecommendedAction",
+              "displayName": "RecommendedAction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1232,
+        -336
+      ],
+      "id": "47864f25-2a10-476c-b1a3-f9c7f60d7175",
+      "name": "Add to Risk Alerts Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "JJZNH1F86NY2ZkXE",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = items.map(item => item.json);\n\nif (rows.length === 0) {\n  return [{\n    json: {\n      subject: \"Deal Risk Monitor: No medium/high-risk deals today\",\n      body: \"No medium- or high-risk deals were found in this run.\"\n    }\n  }];\n}\n\nconst lines = rows.map(d => {\n  return [\n    `Deal: ${d.Company} (${d.DealID})`,\n    `Owner: ${d.Owner}`,\n    `Stage: ${d.Stage}`,\n    `Amount: $${d.Amount}`,\n    `Risk Score: ${d.RiskScore || d.riskScore}`,\n    `Risk Level: ${d.RiskLevel || d.riskLevel}`,\n    `Reasons: ${d.Reasons || d.reasons}`,\n    `Recommended Action: ${d.RecommendedAction || d.recommendedAction}`,\n    `---`\n  ].join('\\n');\n});\n\nreturn [{\n  json: {\n    subject: `Deal Risk Monitor: ${rows.length} risky deal(s) detected`,\n    body: lines.join('\\n\\n')\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        -16
+      ],
+      "id": "e50fa40e-134f-4a48-806b-585787edb890",
+      "name": "Build Email Summary"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1JuvfN58KQdRUaMFRwNNh3gSHvHPCdphG5QAOln1Y8og",
+          "mode": "list",
+          "cachedResultName": "Deal Risk Monitor Portfolio Project",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JuvfN58KQdRUaMFRwNNh3gSHvHPCdphG5QAOln1Y8og/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Open Deals",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1JuvfN58KQdRUaMFRwNNh3gSHvHPCdphG5QAOln1Y8og/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "DealID": "={{ $json.DealID }}",
+            "LatestRiskScore": "={{ $json.riskScore }}",
+            "LatestRiskLevel": "={{ $json.riskLevel }}",
+            "LastReviewedAt": "={{ $json.runDate }}"
+          },
+          "matchingColumns": [
+            "DealID"
+          ],
+          "schema": [
+            {
+              "id": "DealID",
+              "displayName": "DealID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Owner",
+              "displayName": "Owner",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Stage",
+              "displayName": "Stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Amount",
+              "displayName": "Amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "CreatedDate",
+              "displayName": "CreatedDate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "CloseDate",
+              "displayName": "CloseDate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "LastActivityDate",
+              "displayName": "LastActivityDate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "NextStepDate",
+              "displayName": "NextStepDate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "DaysInStage",
+              "displayName": "DaysInStage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Notes",
+              "displayName": "Notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "LatestRiskScore",
+              "displayName": "LatestRiskScore",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LatestRiskLevel",
+              "displayName": "LatestRiskLevel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "LastReviewedAt",
+              "displayName": "LastReviewedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1232,
+        -176
+      ],
+      "id": "0d1373a7-6570-4d7e-8e16-5a7a0a767950",
+      "name": "Update Deal Row",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "JJZNH1F86NY2ZkXE",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "Pipeline Data Ingestion\n\nThe workflow runs on a daily schedule and retrieves open opportunities from the OpenDeals dataset. This provides the raw pipeline data used for downstream risk analysis.",
+        "height": 192,
+        "width": 224
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        112,
+        -288
+      ],
+      "id": "cb82f7b9-2698-4058-b072-7d9ef0d07644",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "Data Normalization\n\nDeal attributes are standardized and derived metrics are calculated, including days since last activity, days until close date, and next-step status.",
+        "height": 192,
+        "width": 192
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        416,
+        -288
+      ],
+      "id": "4165b42a-55e6-41db-81ee-d537b78297a6",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "Deal Risk Evaluation\n\nEach opportunity is evaluated against pipeline health signals such as inactivity, time in stage, close-date proximity, and missing next steps. A composite risk score and reasons are generated to identify deals requiring intervention.",
+        "height": 208
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        656,
+        -288
+      ],
+      "id": "16868799-548b-4b57-b509-ae2c2b766b51",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "Automated Risk Response\n\nOpportunities exceeding the risk threshold are routed into three parallel actions: logging the alert to the RiskAlerts dataset, updating the latest risk state on the original deal record, and generating an email summary for review.",
+        "height": 224,
+        "width": 208
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        928,
+        -288
+      ],
+      "id": "30788ec8-698d-499e-a1c7-5953ad6fb604",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "sendTo": "matkovich.caleb@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        -16
+      ],
+      "id": "d32501b1-6021-4b81-aaba-3850aa13371d",
+      "name": "Send Email Summary",
+      "webhookId": "7571889f-f194-4ebe-affb-0f91f4d0dfda",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "DjhLUHldoj768Dck",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Open Deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Open Deals": {
+      "main": [
+        [
+          {
+            "node": "Normalize Deal Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Deal Data": {
+      "main": [
+        [
+          {
+            "node": "Score Deal Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Deal Risk": {
+      "main": [
+        [
+          {
+            "node": "Filter Medium/High Risk Deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Medium/High Risk Deals": {
+      "main": [
+        [
+          {
+            "node": "Add to Risk Alerts Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Email Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Deal Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to Risk Alerts Sheet": {
+      "main": [
+        []
+      ]
+    },
+    "Build Email Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Email Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Summary": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "50b172cf-51a9-4176-a18c-ec462a928233",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b2fde4c5f25a48fa8819e0144fe1a12fb61865dc322de00c50058aa2ce7f5583"
+  },
+  "id": "5LjtdJmUNI6a6ILI",
+  "tags": []
+}
