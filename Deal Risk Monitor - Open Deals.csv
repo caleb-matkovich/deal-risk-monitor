@@ -1,0 +1,11 @@
+DealID,Company,Owner,Stage,Amount,CreatedDate,CloseDate,LastActivityDate,NextStepDate,DaysInStage,Status,Notes,LatestRiskScore,LatestRiskLevel,LastReviewedAt
+D-001,FinEdge,Alex Rivera,Demo Completed,28000,2/25/2026,03/20/2026,2026-03-10,2026-03-14,5,Open,Champion advocating internally,,,
+D-002,GrowthLoop,Maya Patel,Discovery,15000,3/7/2026,04/05/2026,2026-03-09,2026-03-18,3,Open,Early stage inbound interest,,,
+D-003,NovaTech,Jordan Kim,Proposal Sent,42000,2/5/2026,03/25/2026,2026-02-25,2026-03-05,18,Open,Champion unsure about budget,,,
+D-004,BrightMetrics,Sam Carter,Negotiation,60000,1/28/2026,2026-03-18,2026-02-28,2026-03-03,21,Open,Procurement delay,,,
+D-005,PulseAI,Alex Rivera,Demo Scheduled,22000,3/9/2026,2026-04-01,2026-03-11,2026-03-13,2,Open,Strong engagement so far,,,
+D-006,Stratify Labs,Maya Patel,Proposal Sent,38000,1/30/2026,2026-03-15,2026-02-20,2026-02-28,24,Open,No reply after proposal,,,
+D-007,Apex Systems,Jordan Kim,Discovery,18000,2/20/2026,2026-03-30,2026-03-01,2026-03-06,12,Open,Slow replies,,,
+D-008,Helios Software,Sam Carter,Negotiation,75000,2/15/2026,2026-03-22,2026-03-08,2026-03-12,4,Open,Legal reviewing contract,,,
+D-009,Vertex Data,Alex Rivera,Demo Completed,31000,2/2/2026,2026-03-10,2026-02-22,2026-02-27,20,Open,Champion went quiet,,,
+D-010,Orbit Analytics,Maya Patel,Discovery,12000,3/5/2026,2026-04-10,2026-03-10,2026-03-16,4,Open,Positive discovery call,,,
