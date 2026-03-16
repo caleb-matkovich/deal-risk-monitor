@@ -89,6 +89,15 @@ Below is the n8n workflow used to implement the monitoring system.
 
 ---
 
+## Demo
+
+Short walkthrough of the Deal Risk Monitor workflow and how it flags stalled or high-risk deals.
+
+Loom demo:
+[https://www.loom.com/share/deal-risk-monitor-demo](https://www.loom.com/share/d2faea68f6134794bbd74692c5bf7c0b)
+
+---
+
 ## Example Risk Conditions
 
 Example rules implemented in the workflow include:
